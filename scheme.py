@@ -69,6 +69,11 @@ def getc():
     return IO.reader.read(1)
 
 
+def prompt():
+    sys.stdout.write("> ")
+    sys.stdout.flush()
+
+
 def read_fixnum(num):
     while peek().isdigit():
         num = num * 10 + int(getc())
@@ -109,7 +114,7 @@ def read_expr():
 
 def main():
     if len(sys.argv) == 1:
-        print "Welcome to Pysche. Use ctrl-c to exit."
+        print "Welcome to scheme.py. Use ctrl-c to exit."
         stream = sys.stdin
     else:
         stream = open(sys.argv[1])
@@ -117,10 +122,11 @@ def main():
 
     try:
         while True:
+            prompt()
             expr = read_expr()
             if expr is None:
                 break
-            print ">", expr
+            print expr
     except KeyboardInterrupt:
         print "\nGoodbye."
 
