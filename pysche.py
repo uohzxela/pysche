@@ -2,30 +2,74 @@ import sys
 import io
 import pdb
 
-LPAREN = '('
-RPAREN = ')'
-# initialize a global file reader 
-# to avoid passing it around as function arg
-reader = None
+
+class Token(object):
+    LPAREN = '('
+    RPAREN = ')'
+
+
+class IO(object):
+    reader = None
+
+    @staticmethod
+    def initialize_reader(stream):
+        IO.reader = io.open(stream.fileno(), mode='rb', closefd=False)
+
+
+class Type(object):
+    FIXNUM = 1
+    SYMBOL = 2
+    LIST = 3
+
+
+class Fixnum(object):
+    def __init__(self, val):
+        self.type = Type.FIXNUM
+        self.val = val
+
+    def __str__(self):
+        return str(self.val)
+
+
+class Symbol(object):
+    def __init__(self, val):
+        self.type = Type.SYMBOL
+        self.val = val
+
+    def __str__(self):
+        return "\"" + self.val + "\""
+
+
+class List(object):
+    def __init__(self, list):
+        self.type = Type.LIST
+        self.list = list
+
+    def __str__(self):
+        buffer = []
+        for obj in self.list:
+            buffer.append(str(obj))
+        return "(" + ", ".join(buffer) + ")"
+
 
 def read_list():
     L = []
     while True:
         expr = read_expr()
-        if expr == RPAREN:
+        if expr == Token.RPAREN:
             return L
         L.append(expr)
 
 
 def peek():
-    return reader.peek(1)
+    return IO.reader.peek(1)[0]
 
 
 def getc():
-    return reader.read(1)
+    return IO.reader.read(1)
 
 
-def read_number(num):
+def read_fixnum(num):
     while peek().isdigit():
         num = num * 10 + int(getc())
     return num
@@ -35,7 +79,6 @@ def read_symbol(c):
     buffer = [c]
     while peek().isalpha():
         buffer.append(getc())
-    # TODO: intern symbol
     return ''.join(buffer)
 
 
@@ -48,15 +91,18 @@ def read_expr():
     # skip whitespaces, newlines or tabs
     if is_redundant(c):
         return read_expr()
-    elif c == LPAREN:
-        return read_list()
-    elif c == RPAREN:
-        return RPAREN
+    elif c == Token.LPAREN:
+        return List(read_list())
+    elif c == Token.RPAREN:
+        return Token.RPAREN
     elif c.isalpha():
-        return read_symbol(c)
+        # TODO: intern symbol
+        return Symbol(read_symbol(c))
     elif c.isdigit():
-        return read_number(int(c))
-    elif not c: # EOF
+        return Fixnum(read_fixnum(int(c)))
+    elif c == '-' and peek().isdigit():
+        return Fixnum(-1*read_fixnum(int(getc())))
+    elif c == '':  # EOF
         return None
     return read_expr()
 
@@ -67,17 +113,14 @@ def main():
         stream = sys.stdin
     else:
         stream = open(sys.argv[1])
-
-    global reader
-    reader = io.open(stream.fileno(), mode='rb', closefd=False)
+    IO.initialize_reader(stream)
 
     try:
         while True:
             expr = read_expr()
-            if not expr: # EOF
+            if expr is None:
                 break
-            print ">",
-            print expr
+            print ">", expr
     except KeyboardInterrupt:
         print "\nGoodbye."
 
