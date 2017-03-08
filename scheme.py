@@ -33,8 +33,8 @@ class Token(object):
     LPAREN = '('
     RPAREN = ')'
     SPACE = ' '
-    CR = '\r'
-    LF = '\n'
+    RETURN = '\r'
+    NEWLINE = '\n'
     TAB = '\t'
     HASH = '#'
     DOUBLE_QUOTE = '\"'
@@ -57,11 +57,11 @@ class Character(object):
     def __str__(self):
         c = self.val
         prefix = "#\\"
-        if c == '\n':
+        if c == Token.NEWLINE:
             return prefix + "newline"
-        elif c == '\t':
+        elif c == Token.TAB:
             return prefix + "tab"
-        elif c == ' ':
+        elif c == Token.SPACE:
             return prefix + "space"
         else:
             return prefix + c
@@ -92,11 +92,16 @@ class Symbol(object):
 
     def __str__(self):
         buffer = [Token.DOUBLE_QUOTE]
+        # escape during printing
         for c in self.val:
-            if c == '\n': c = '\\n'
-            elif c == '\t': c = '\\t'
-            elif c == '\"': c = '\\"'
-            elif c == '\\': c = '\\\\'
+            if c == Token.NEWLINE:
+                c = '\\n'
+            elif c == Token.TAB:
+                c = '\\t'
+            elif c == Token.DOUBLE_QUOTE:
+                c = '\\"'
+            elif c == Token.BACKSLASH:
+                c = '\\\\'
             buffer.append(c)
         buffer.append(Token.DOUBLE_QUOTE)
         return "".join(buffer)
@@ -136,20 +141,20 @@ def read_char():
     char = "".join(buffer)
     if buffer:
         if char == "newline":
-            return Character('\n')
+            return Character(Token.NEWLINE)
         elif char == "space":
-            return Character(' ')
+            return Character(Token.SPACE)
         elif char == "tab":
-            return Character('\t')
+            return Character(Token.TAB)
         elif len(char) == 1:
             return Character(char)
     else:
         if IO.peek() == ' ':
-            return Character(' ')
-        elif IO.peek() == '\n':
-            return Character('\n')
-        elif IO.peek() == '\t':
-            return Character('\t')
+            return Character(Token.SPACE)
+        elif IO.peek() == Token.NEWLINE:
+            return Character(Token.NEWLINE)
+        elif IO.peek() == Token.TAB:
+            return Character(Token.TAB)
     raise ValueError("unknown character literal")
 
 
@@ -168,16 +173,17 @@ def read_symbol():
     buffer = []
     while IO.peek() != Token.DOUBLE_QUOTE:
         c = IO.getc()
-        # escape
-        if c == '\n': c = '\\n'
-        elif c == '\t': c = '\\t'
         # unescape
-        elif c == '\\':
+        if c == Token.BACKSLASH:
             next_c = IO.getc()
-            if next_c == '\"': c = '\"'
-            elif next_c == 'n': c = '\n'
-            elif next_c == 't': c = '\t'
-            elif next_c == '\\': c = '\\'
+            if next_c == Token.DOUBLE_QUOTE:
+                c = Token.DOUBLE_QUOTE
+            elif next_c == 'n':
+                c = Token.NEWLINE
+            elif next_c == 't':
+                c = Token.TAB
+            elif next_c == Token.BACKSLASH:
+                c = Token.BACKSLASH
             else:
                 c += next_c
         buffer.append(c)
@@ -193,8 +199,8 @@ def intern_symbol(sym):
 
 def is_redundant(c):
     return (c == Token.SPACE or
-            c == Token.LF or
-            c == Token.CR or
+            c == Token.NEWLINE or
+            c == Token.RETURN or
             c == Token.TAB)
 
 
