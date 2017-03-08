@@ -2,12 +2,17 @@ import sys
 import io
 import pdb
 
+SYMBOL_TABLE = {}
+# singleton boolean objects
+false = None
+true = None
+
 
 class IO(object):
     reader = None
 
     @staticmethod
-    def initialize_reader(stream):
+    def init_reader(stream):
         IO.reader = io.open(stream.fileno(), mode='rb')
 
     @staticmethod
@@ -31,12 +36,44 @@ class Token(object):
     CR = '\r'
     LF = '\n'
     TAB = '\t'
+    HASH = '#'
+    DOUBLE_QUOTE = '\"'
+    BACKSLASH = '\\'
 
 
 class Type(object):
     FIXNUM = 1
     SYMBOL = 2
     LIST = 3
+    BOOLEAN = 4
+    CHARACTER = 5
+
+
+class Character(object):
+    def __init__(self, val):
+        self.type = Type.CHARACTER
+        self.val = val
+
+    def __str__(self):
+        c = self.val
+        prefix = "#\\"
+        if c == '\n':
+            return prefix + "newline"
+        elif c == '\t':
+            return prefix + "tab"
+        elif c == ' ':
+            return prefix + "space"
+        else:
+            return prefix + c
+
+
+class Boolean(object):
+    def __init__(self, val):
+        self.type = Type.BOOLEAN
+        self.val = val
+
+    def __str__(self):
+        return "#f" if self.val == 0 else "#t"
 
 
 class Fixnum(object):
@@ -54,7 +91,15 @@ class Symbol(object):
         self.val = val
 
     def __str__(self):
-        return "\"" + self.val + "\""
+        buffer = [Token.DOUBLE_QUOTE]
+        for c in self.val:
+            if c == '\n': c = '\\n'
+            elif c == '\t': c = '\\t'
+            elif c == '\"': c = '\\"'
+            elif c == '\\': c = '\\\\'
+            buffer.append(c)
+        buffer.append(Token.DOUBLE_QUOTE)
+        return "".join(buffer)
 
 
 class List(object):
@@ -84,11 +129,66 @@ def read_fixnum(num):
     return num
 
 
-def read_symbol(c):
-    buffer = [c]
-    while IO.peek().isalpha():
+def read_char():
+    buffer = []
+    while IO.peek().isalnum():
         buffer.append(IO.getc())
-    return ''.join(buffer)
+    char = "".join(buffer)
+    if buffer:
+        if char == "newline":
+            return Character('\n')
+        elif char == "space":
+            return Character(' ')
+        elif char == "tab":
+            return Character('\t')
+        elif len(char) == 1:
+            return Character(char)
+    else:
+        if IO.peek() == ' ':
+            return Character(' ')
+        elif IO.peek() == '\n':
+            return Character('\n')
+        elif IO.peek() == '\t':
+            return Character('\t')
+    raise ValueError("unknown character literal")
+
+
+def read_bool_or_char():
+    c = IO.getc()
+    if c == 't':
+        return true
+    elif c == 'f':
+        return false
+    elif c == Token.BACKSLASH:
+        return read_char()
+    raise ValueError("unknown boolean literal")
+
+
+def read_symbol():
+    buffer = []
+    while IO.peek() != Token.DOUBLE_QUOTE:
+        c = IO.getc()
+        # escape
+        if c == '\n': c = '\\n'
+        elif c == '\t': c = '\\t'
+        # unescape
+        elif c == '\\':
+            next_c = IO.getc()
+            if next_c == '\"': c = '\"'
+            elif next_c == 'n': c = '\n'
+            elif next_c == 't': c = '\t'
+            elif next_c == '\\': c = '\\'
+            else:
+                c += next_c
+        buffer.append(c)
+    IO.getc()  # get rid of double quote
+    return "".join(buffer)
+
+
+def intern_symbol(sym):
+    if sym not in SYMBOL_TABLE:
+        SYMBOL_TABLE[sym] = Symbol(sym)
+    return SYMBOL_TABLE[sym]
 
 
 def is_redundant(c):
@@ -99,24 +199,38 @@ def is_redundant(c):
 
 
 def read_expr():
-    c = IO.getc()
-    # skip whitespaces, newlines or tabs
-    if is_redundant(c):
+    try:
+        c = IO.getc()
+        # skip whitespaces, newlines or tabs
+        if is_redundant(c):
+            return read_expr()
+        elif c == Token.LPAREN:
+            return List(read_list())
+        elif c == Token.RPAREN:
+            return Token.RPAREN
+        elif c == Token.HASH:
+            return read_bool_or_char()
+        elif c == Token.DOUBLE_QUOTE:
+            return intern_symbol(read_symbol())
+        elif c.isdigit():
+            return Fixnum(read_fixnum(int(c)))
+        elif c == '-' and IO.peek().isdigit():
+            return Fixnum(-1*read_fixnum(int(IO.getc())))
+        elif c == '':  # EOF
+            return None
         return read_expr()
-    elif c == Token.LPAREN:
-        return List(read_list())
-    elif c == Token.RPAREN:
-        return Token.RPAREN
-    elif c.isalpha():
-        # TODO: intern symbol
-        return Symbol(read_symbol(c))
-    elif c.isdigit():
-        return Fixnum(read_fixnum(int(c)))
-    elif c == '-' and IO.peek().isdigit():
-        return Fixnum(-1*read_fixnum(int(IO.getc())))
-    elif c == '':  # EOF
-        return None
-    return read_expr()
+    except ValueError as e:
+        return e
+
+
+def eval(expr):
+    return expr
+
+
+def init():
+    global false, true
+    false = Boolean(0)
+    true = Boolean(1)
 
 
 def main():
@@ -125,15 +239,15 @@ def main():
         stream = sys.stdin
     else:
         stream = open(sys.argv[1])
-    IO.initialize_reader(stream)
-
+    IO.init_reader(stream)
+    init()
     try:
         while True:
             IO.prompt()
             expr = read_expr()
             if expr is None:
                 break
-            print expr
+            print eval(expr)
     except KeyboardInterrupt:
         print "\nGoodbye."
 
