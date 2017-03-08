@@ -3,17 +3,34 @@ import io
 import pdb
 
 
-class Token(object):
-    LPAREN = '('
-    RPAREN = ')'
-
-
 class IO(object):
     reader = None
 
     @staticmethod
     def initialize_reader(stream):
-        IO.reader = io.open(stream.fileno(), mode='rb', closefd=False)
+        IO.reader = io.open(stream.fileno(), mode='rb')
+
+    @staticmethod
+    def peek():
+        return IO.reader.peek(1)[0]
+
+    @staticmethod
+    def getc():
+        return IO.reader.read(1)
+
+    @staticmethod
+    def prompt():
+        sys.stdout.write("> ")
+        sys.stdout.flush()
+
+
+class Token(object):
+    LPAREN = '('
+    RPAREN = ')'
+    SPACE = ' '
+    CR = '\r'
+    LF = '\n'
+    TAB = '\t'
 
 
 class Type(object):
@@ -61,38 +78,28 @@ def read_list():
         L.append(expr)
 
 
-def peek():
-    return IO.reader.peek(1)[0]
-
-
-def getc():
-    return IO.reader.read(1)
-
-
-def prompt():
-    sys.stdout.write("> ")
-    sys.stdout.flush()
-
-
 def read_fixnum(num):
-    while peek().isdigit():
-        num = num * 10 + int(getc())
+    while IO.peek().isdigit():
+        num = num * 10 + int(IO.getc())
     return num
 
 
 def read_symbol(c):
     buffer = [c]
-    while peek().isalpha():
-        buffer.append(getc())
+    while IO.peek().isalpha():
+        buffer.append(IO.getc())
     return ''.join(buffer)
 
 
 def is_redundant(c):
-    return (c == ' ' or c == '\n' or c == '\r' or c == '\t')
+    return (c == Token.SPACE or
+            c == Token.LF or
+            c == Token.CR or
+            c == Token.TAB)
 
 
 def read_expr():
-    c = getc()
+    c = IO.getc()
     # skip whitespaces, newlines or tabs
     if is_redundant(c):
         return read_expr()
@@ -105,8 +112,8 @@ def read_expr():
         return Symbol(read_symbol(c))
     elif c.isdigit():
         return Fixnum(read_fixnum(int(c)))
-    elif c == '-' and peek().isdigit():
-        return Fixnum(-1*read_fixnum(int(getc())))
+    elif c == '-' and IO.peek().isdigit():
+        return Fixnum(-1*read_fixnum(int(IO.getc())))
     elif c == '':  # EOF
         return None
     return read_expr()
@@ -122,7 +129,7 @@ def main():
 
     try:
         while True:
-            prompt()
+            IO.prompt()
             expr = read_expr()
             if expr is None:
                 break
